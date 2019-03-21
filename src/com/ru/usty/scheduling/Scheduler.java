@@ -1,5 +1,7 @@
 package com.ru.usty.scheduling;
 
+import java.awt.List;
+
 import com.ru.usty.scheduling.process.ProcessExecution;
 
 public class Scheduler {
@@ -7,6 +9,7 @@ public class Scheduler {
 	ProcessExecution processExecution;
 	Policy policy;
 	int quantum;
+	List<Integer> processQueue;
 
 	/**
 	 * Add any objects and variables here (if needed)
