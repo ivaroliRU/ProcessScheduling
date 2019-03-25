@@ -19,7 +19,7 @@ public class Scheduler {
 	
 	public Semaphore getQueue, getExecutioner;
 	public Queue<Integer> processQueue;
-	public PriorityQueue<ProcessInfo> priorityProcessQueue;
+	public PriorityQueue<ProcessComparable> priorityProcessQueue;
 	Map<Integer, Long> processesServiceTimes;
 	
 	ProcessExecution processExecution;
@@ -55,16 +55,13 @@ public class Scheduler {
 			processQueue = new LinkedList<Integer>();
 			break;
 		case SPN:	//Shortest process next
-			System.out.println("Starting new scheduling task: Shortest process next");
-			/**
-			 * Add your policy specific initialization code here (if needed)
-			 */
+			System.out.println("Starting new scheduling task: SPN, quantum = " + quantum);
+			//priorityProcessQueue = new PriorityQueue();
+			processQueue = new LinkedList<Integer>();
+			priorityProcessQueue = new PriorityQueue<ProcessComparable>();
 			break;
 		case SRT:	//Shortest remaining time
 			System.out.println("Starting new scheduling task: Shortest remaining time");
-			/**
-			 * Add your policy specific initialization code here (if needed)
-			 */
 			break;
 		case HRRN:	//Highest response ratio next
 			System.out.println("Starting new scheduling task: Highest response ratio next");
@@ -89,7 +86,7 @@ public class Scheduler {
 	 */
 	public void processAdded(int processID) {
 		long addedTime = System.currentTimeMillis();
-		processesAddedTimes.put(processID, addedTime);		
+		processesAddedTimes.put(processID, addedTime);
 		
 		switch(policy) {
 		case FCFS:
@@ -109,6 +106,27 @@ public class Scheduler {
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
+			break;
+		case SPN:
+			try {
+				System.out.println("1.1");
+				getExecutioner.acquire();
+				System.out.println("1.2");
+				long length = processExecution.getProcessInfo(processID).totalServiceTime;
+				getExecutioner.release();
+				
+				System.out.println("1.3");
+				getQueue.acquire();
+				System.out.println("1.4");
+				priorityProcessQueue.add(new ProcessComparable(policy, System.currentTimeMillis(), length, processID));
+				getQueue.release();
+				/*getQueue.acquire();
+				processQueue.add(processID);
+				getQueue.release();*/
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+			break;
 		default:
 			break;
 		}

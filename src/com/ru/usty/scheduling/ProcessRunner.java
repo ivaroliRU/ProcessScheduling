@@ -23,15 +23,19 @@ public class ProcessRunner implements Runnable{
 		while(true) {
 			try {
 				scheduler.getQueue.acquire();
-				if(scheduler.processQueue.size() == 0) {
+				int process = getNextId();
+				
+				if(process < 0) {
 					scheduler.getQueue.release();
 					continue;
 				}
 				
-				int process = scheduler.processQueue.remove();
+				System.out.println("5");
 				scheduler.getQueue.release();
 				
+				System.out.println("6");
 				scheduler.getExecutioner.acquire();
+				System.out.println("7");
 				ProcessInfo pInfo = scheduler.processExecution.getProcessInfo(process);
 				scheduler.getExecutioner.release();
 				
@@ -43,6 +47,29 @@ public class ProcessRunner implements Runnable{
 				continue;
 			}
 		}
+	}
+	
+	private int getNextId() {
+		if(policy == Policy.RR || policy == Policy.FCFS) {
+			if(scheduler.processQueue.size() == 0) {
+				return -1;
+			}
+			
+			return scheduler.processQueue.remove();
+		}
+		else {
+			if(scheduler.priorityProcessQueue.size() == 0) {
+				return -1;
+			}
+			
+			return scheduler.priorityProcessQueue.poll().id;
+		}
+		
+		/*if(scheduler.processQueue.size() == 0) {
+			return -1;
+		}
+		
+		return scheduler.processQueue.remove();*/
 	}
 	
 	private void runProcess(ProcessInfo pInfo, int id) {
@@ -91,6 +118,29 @@ public class ProcessRunner implements Runnable{
 				e.printStackTrace();
 			}
 			break;
+			case SPN:
+				try {
+					scheduler.getExecutioner.acquire();
+					scheduler.processExecution.switchToProcess(id);
+					scheduler.getExecutioner.release();
+					
+					if(timeLeft <= quantum) {
+						Thread.sleep(timeLeft + Scheduler.TimeErrorOffset);
+					}
+					else {
+						//wait for the round robin time and the add the process back to the queue
+						long prev = processesServiceTimes.get(id);
+						processesServiceTimes.put(id, prev + (long)quantum);
+						Thread.sleep(quantum);
+						
+						scheduler.getQueue.acquire();
+						scheduler.processQueue.add(id);
+						scheduler.getQueue.release();
+					}
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+				break;
 		}
 	}
 }

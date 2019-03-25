@@ -35,15 +35,8 @@ public class ProcessHandler implements ProcessExecution {
 	}
 
 	public void addProcess(int processID, long timeToRun) {
-		try {
-			scheduler.getExecutioner.acquire();
-			processes.put(processID, new Process(processID, timeToRun));
-			scheduler.processAdded(processID);
-			scheduler.getExecutioner.release();
-		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+		processes.put(processID, new Process(processID, timeToRun));
+		scheduler.processAdded(processID);
 	}
 
 	public Collection<Process> getProcesses() {
