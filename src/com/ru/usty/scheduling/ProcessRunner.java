@@ -12,12 +12,15 @@ import java.util.Map;
 import com.ru.usty.scheduling.process.ProcessInfo;
 
 public class ProcessRunner implements Runnable{
+	final static long TimeErrorOffset = 70;
+	
 	Scheduler scheduler;
 	Policy policy;
 	//the quentum
 	int quantum;
 	//used for FB
 	int queueNumber;
+	boolean isRunning;
 	Map<Integer, Long> processesServiceTimes;
 
 	public ProcessRunner(Scheduler scheduler, Policy policy, int quantum) {
@@ -25,13 +28,19 @@ public class ProcessRunner implements Runnable{
 		this.policy = policy;
 		this.processesServiceTimes = new HashMap<Integer, Long>();
 		this.quantum = quantum;
+		this.isRunning = true;
 	}
 
+	public void ResetThread() {
+		this.isRunning = false;
+	}
+	
 	@Override
 	public void run() {
 		ProcessComparable process = null;
 		
-		while(true) {
+		while(isRunning) {
+			System.out.println("ASDF");
 			try {
 				scheduler.getQueue.acquire();
 				//if we have a process then don't do anything
@@ -43,9 +52,7 @@ public class ProcessRunner implements Runnable{
 				}
 				
 				scheduler.getQueue.release();
-				
-				System.out.println("ASDFASDF");
-				
+								
 				scheduler.getExecutioner.acquire();
 				ProcessInfo pInfo = scheduler.processExecution.getProcessInfo(process.id);
 				scheduler.getExecutioner.release();
@@ -84,7 +91,7 @@ public class ProcessRunner implements Runnable{
 				scheduler.getExecutioner.release();
 				
 				//add 50 ms to offset any time errors (so that we for sure finish the process)
-				Thread.sleep(timeLeft + Scheduler.TimeErrorOffset);
+				Thread.sleep(timeLeft + TimeErrorOffset);
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
@@ -100,7 +107,7 @@ public class ProcessRunner implements Runnable{
 				
 				//then either wait sleep the whole process if the quantum is larger or sleep only for the quantum
 				if(timeLeft <= quantum) {
-					Thread.sleep(timeLeft + Scheduler.TimeErrorOffset);
+					Thread.sleep(timeLeft + TimeErrorOffset);
 				}
 				else {
 					long prev = processesServiceTimes.get(process.id);
@@ -129,7 +136,6 @@ public class ProcessRunner implements Runnable{
 						scheduler.FBQueue.get(queueNumber+1).add(process);
 					}
 					scheduler.getQueue.release();
-					System.out.println("6");
 				}
 			} catch (InterruptedException e) {
 				e.printStackTrace();

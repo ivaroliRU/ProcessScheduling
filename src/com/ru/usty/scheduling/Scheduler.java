@@ -22,11 +22,6 @@ import java.util.concurrent.Semaphore;
 import com.ru.usty.scheduling.process.ProcessExecution;
 
 public class Scheduler {
-	//run each process for 300ms or less
-	final static long RoundRobinRunningTime = 300;
-	//Offset any time error so we for sure finish running each process
-	final static long TimeErrorOffset = 50;
-	
 	//semaphores so that the thread can access the queue and the process execution
 	public Semaphore getQueue, getExecutioner;
 	
@@ -40,6 +35,8 @@ public class Scheduler {
 	ProcessExecution processExecution;
 	Policy policy;
 	int quantum;
+	ProcessRunner runner;
+	Thread backgroundThread;
 	
 	//processes and their added times;
 	Map<Integer, Long> processesAddedTimes;
@@ -53,11 +50,11 @@ public class Scheduler {
 	public void startScheduling(Policy policy, int quantum) {
 		this.policy = policy;
 		this.quantum = quantum;
-		this.processesAddedTimes = new HashMap<Integer, Long>();//processes and 
+		this.processesAddedTimes = new HashMap<Integer, Long>();
+		
 		//we only need to initialise a priority queue for all policies because
 		//if the elements inside a priority queue always return 0 when comapred then the priority queue acts like a normal queue!
 		//Resulting in a much cleaner code with the same functionality as the ugly switch statements give
-
 		switch(policy) {
 		case FCFS:	//First-come-first-served
 			System.out.println("Starting new scheduling task: First-come-first-served");
@@ -85,9 +82,21 @@ public class Scheduler {
 			FBQueue.add(new LinkedList<ProcessComparable>());
 			break;
 		}
-
-		Thread thread = new Thread(new ProcessRunner(this, policy, quantum));
-		thread.start();
+		
+		//stop the thread and initialize a new one for the new policy
+		if(runner != null) {
+			runner.ResetThread();
+			try {
+				backgroundThread.join();
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		
+		runner = new ProcessRunner(this, policy, quantum);
+		backgroundThread = new Thread(runner);
+		backgroundThread.start();
 	}
 
 	//This function adds the process to the correct queue according to it's policy
@@ -116,7 +125,6 @@ public class Scheduler {
 								
 				getQueue.acquire();
 				priorityProcessQueue.add(new ProcessComparable(policy, System.currentTimeMillis(), length, processID));
-				System.out.println(priorityProcessQueue.size());
 				getQueue.release();
 			} catch (InterruptedException e) {
 				e.printStackTrace();
