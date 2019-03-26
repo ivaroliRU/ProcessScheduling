@@ -1,6 +1,12 @@
+/*
+ * This Class implements a thread that is always running and checking if there are
+ * any new processes to be run. If there aren't any then just check again until there are.
+ */
+
 package com.ru.usty.scheduling;
 
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.Map;
 
 import com.ru.usty.scheduling.process.ProcessInfo;
@@ -8,7 +14,10 @@ import com.ru.usty.scheduling.process.ProcessInfo;
 public class ProcessRunner implements Runnable{
 	Scheduler scheduler;
 	Policy policy;
+	//the quentum
 	int quantum;
+	//used for FB
+	int queueNumber;
 	Map<Integer, Long> processesServiceTimes;
 
 	public ProcessRunner(Scheduler scheduler, Policy policy, int quantum) {
@@ -20,73 +29,58 @@ public class ProcessRunner implements Runnable{
 
 	@Override
 	public void run() {
+		ProcessComparable process = null;
+		
 		while(true) {
 			try {
 				scheduler.getQueue.acquire();
-				int process = getNextId();
+				//if we have a process then don't do anything
+				process = (process == null)?getNextId():process;
 				
-				if(process < 0) {
+				if(process == null) {
 					scheduler.getQueue.release();
 					continue;
 				}
 				
-				System.out.println("5");
 				scheduler.getQueue.release();
 				
-				System.out.println("6");
+				System.out.println("ASDFASDF");
+				
 				scheduler.getExecutioner.acquire();
-				System.out.println("7");
-				ProcessInfo pInfo = scheduler.processExecution.getProcessInfo(process);
+				ProcessInfo pInfo = scheduler.processExecution.getProcessInfo(process.id);
 				scheduler.getExecutioner.release();
 				
 				runProcess(pInfo, process);
+				process = null;
 				
 			} catch (Exception e) {
 				//here we failed to get the ProcessInfo likely because of a race condition so we try again
+				//and give back the process
 				scheduler.getExecutioner.release();
 				continue;
 			}
 		}
 	}
 	
-	private int getNextId() {
-		if(policy == Policy.RR || policy == Policy.FCFS) {
-			if(scheduler.processQueue.size() == 0) {
-				return -1;
-			}
-			
-			return scheduler.processQueue.remove();
-		}
-		else {
-			if(scheduler.priorityProcessQueue.size() == 0) {
-				return -1;
-			}
-			
-			return scheduler.priorityProcessQueue.poll().id;
-		}
-		
-		/*if(scheduler.processQueue.size() == 0) {
-			return -1;
-		}
-		
-		return scheduler.processQueue.remove();*/
-	}
-	
-	private void runProcess(ProcessInfo pInfo, int id) {
+	private void runProcess(ProcessInfo pInfo, ProcessComparable process) {
+		//below we calculate the remaining time of the process
+		//use that either to run the process the whole remaining time or to check if the quantum is larger then
+		//the remaining time
 		long timeLeft;
-		if(processesServiceTimes.containsKey(id)) {
-			timeLeft = pInfo.totalServiceTime - processesServiceTimes.get(id);
+		if(processesServiceTimes.containsKey(process.id)) {
+			timeLeft = pInfo.totalServiceTime - processesServiceTimes.get(process.id);
 		}
 		else {
 			timeLeft = pInfo.totalServiceTime;
-			processesServiceTimes.put(id, (long)0);
+			processesServiceTimes.put(process.id, (long)0);
 		}
 		
-		switch(policy) {
-		case FCFS:
+		//none preemptive dót
+		//S.s. hér keyrum við processann til enda
+		if(policy == Policy.FCFS || policy == Policy.SPN || policy == Policy.HRRN) {
 			try {
 				scheduler.getExecutioner.acquire();
-				scheduler.processExecution.switchToProcess(id);
+				scheduler.processExecution.switchToProcess(process.id);
 				scheduler.getExecutioner.release();
 				
 				//add 50 ms to offset any time errors (so that we for sure finish the process)
@@ -94,53 +88,85 @@ public class ProcessRunner implements Runnable{
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
-			break;
-		case RR:
+		}
+		//preemtive
+		//run a process in bursts
+		else if(policy == Policy.RR || policy == Policy.SRT || policy == Policy.FB){
 			try {
+				//change to the process
 				scheduler.getExecutioner.acquire();
-				scheduler.processExecution.switchToProcess(id);
+				scheduler.processExecution.switchToProcess(process.id);
 				scheduler.getExecutioner.release();
 				
+				//then either wait sleep the whole process if the quantum is larger or sleep only for the quantum
 				if(timeLeft <= quantum) {
 					Thread.sleep(timeLeft + Scheduler.TimeErrorOffset);
 				}
 				else {
-					//wait for the round robin time and the add the process back to the queue
-					long prev = processesServiceTimes.get(id);
-					processesServiceTimes.put(id, prev + (long)quantum);
+					long prev = processesServiceTimes.get(process.id);
+					processesServiceTimes.put(process.id, prev + (long)quantum);
+					
+					process.timeLeft = (int)timeLeft;
+					
 					Thread.sleep(quantum);
 					
 					scheduler.getQueue.acquire();
-					scheduler.processQueue.add(id);
+					
+					//add back to the queue
+					if(policy == Policy.RR) {
+						scheduler.processQueue.add(process);
+					}
+					//SRT
+					else if (policy == Policy.SRT){
+						scheduler.priorityProcessQueue.add(process);
+					}
+					//Feedback
+					else {
+						if(scheduler.FBQueue.size() <= queueNumber+1) {
+							scheduler.FBQueue.add(new LinkedList<ProcessComparable>());
+						}
+						System.out.println("Adding back to queue " + (queueNumber + 1));
+						scheduler.FBQueue.get(queueNumber+1).add(process);
+					}
 					scheduler.getQueue.release();
+					System.out.println("6");
 				}
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
-			break;
-			case SPN:
-				try {
-					scheduler.getExecutioner.acquire();
-					scheduler.processExecution.switchToProcess(id);
-					scheduler.getExecutioner.release();
-					
-					if(timeLeft <= quantum) {
-						Thread.sleep(timeLeft + Scheduler.TimeErrorOffset);
-					}
-					else {
-						//wait for the round robin time and the add the process back to the queue
-						long prev = processesServiceTimes.get(id);
-						processesServiceTimes.put(id, prev + (long)quantum);
-						Thread.sleep(quantum);
-						
-						scheduler.getQueue.acquire();
-						scheduler.processQueue.add(id);
-						scheduler.getQueue.release();
-					}
-				} catch (InterruptedException e) {
-					e.printStackTrace();
+		}
+	}
+	
+	//get the next process to be run
+	//almost all the scheduling functionality is implemented in the comparable object
+	private ProcessComparable getNextId() {
+		//get the next element out of the regular queue to be run
+		if(policy == Policy.RR || policy == Policy.FCFS) {
+			if(scheduler.processQueue.size() == 0) {
+				return null;
+			}
+			
+			return scheduler.processQueue.remove();
+		}
+		//get the next element out of the priority queue to be run
+		//see ProcessComparable for the actual scheduling algorithm implementation
+		else if (policy == Policy.SRT || policy == Policy.HRRN || policy == Policy.HRRN){
+			if(scheduler.priorityProcessQueue.size() == 0) {
+				return null;
+			}
+			
+			return scheduler.priorityProcessQueue.poll();
+		}
+		//get the next process for the array of queues
+		else {
+			for(int i = 0; i < scheduler.FBQueue.size(); i++) {
+				if(scheduler.FBQueue.get(i).size() == 0) {
+					continue;
 				}
-				break;
+				queueNumber = i;
+				return scheduler.FBQueue.get(i).remove();
+			}
+			return null;
 		}
 	}
 }
